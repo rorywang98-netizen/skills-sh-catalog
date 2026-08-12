@@ -1,0 +1,58 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main, master]
+  schedule:
+    # Daily 08:00 UTC ≈ 16:00 CST — refresh installs from skills.sh
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build catalog from skills.sh
+        env:
+          FORCE_REFRESH: "1"
+        run: python scripts/build_catalog.py --force
+
+      - name: Prepare site root
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r data _site/data
+          cp index.html _site/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
